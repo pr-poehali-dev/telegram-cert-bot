@@ -1,0 +1,39 @@
+{
+  "tests": [
+    {
+      "name": "Get all certificates",
+      "method": "GET",
+      "path": "/",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "certificates": "array"
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Search certificate by ID",
+      "method": "GET",
+      "path": "/?id=CERT-2024-001",
+      "expectedStatus": 200,
+      "expectedBody": {
+        "found": true,
+        "certificate": {
+          "id": "string",
+          "owner_name": "string",
+          "certificate_url": "string"
+        }
+      },
+      "bodyMatcher": "partial"
+    },
+    {
+      "name": "Certificate not found",
+      "method": "GET",
+      "path": "/?id=INVALID-ID",
+      "expectedStatus": 404,
+      "expectedBody": {
+        "found": false
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
