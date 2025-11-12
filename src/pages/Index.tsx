@@ -7,6 +7,7 @@ import Icon from '@/components/ui/icon';
 import { useToast } from '@/hooks/use-toast';
 
 const API_URL = 'https://functions.poehali.dev/29ec2cf8-be14-47c7-9bd8-1965dae40fb3';
+const WEBHOOK_SETUP_URL = 'https://functions.poehali.dev/d22da8d2-66f4-4d1b-8a19-e14bcb758144';
 const ADMIN_USERNAME = 'skzry';
 
 interface Certificate {
@@ -23,11 +24,45 @@ const Index = () => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newCert, setNewCert] = useState({ id: '', owner_name: '', certificate_url: '' });
   const [loading, setLoading] = useState(false);
+  const [webhookStatus, setWebhookStatus] = useState<string>('');
   const { toast } = useToast();
 
   useEffect(() => {
     fetchCertificates();
+    checkWebhook();
   }, []);
+
+  const checkWebhook = async () => {
+    try {
+      const res = await fetch(WEBHOOK_SETUP_URL);
+      const data = await res.json();
+      if (data.result?.url) {
+        setWebhookStatus('✅ Активен');
+      } else {
+        setWebhookStatus('⚠️ Не настроен');
+      }
+    } catch (error) {
+      setWebhookStatus('❌ Ошибка');
+    }
+  };
+
+  const setupWebhook = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(WEBHOOK_SETUP_URL, { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        toast({ title: '✅ Webhook настроен!' });
+        checkWebhook();
+      } else {
+        toast({ title: 'Ошибка настройки webhook', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Ошибка сети', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchCertificates = async () => {
     try {
@@ -269,21 +304,57 @@ const Index = () => {
           </CardContent>
         </Card>
 
-        <div className="mt-8 p-6 rounded-xl bg-gradient-to-r from-primary/10 via-accent/10 to-secondary/10 border-2 border-primary/20">
-          <h3 className="text-xl font-bold mb-3 flex items-center gap-2">
-            <Icon name="MessageSquare" size={24} className="text-primary" />
-            Telegram-бот
-          </h3>
-          <p className="text-muted-foreground mb-2">
-            Бот готов к интеграции! Используйте API endpoint для поиска:
-          </p>
-          <code className="block p-3 bg-black/5 rounded text-sm font-mono">
-            GET {API_URL}?id=CERT-2024-001
-          </code>
-          <p className="text-sm text-muted-foreground mt-2">
-            При команде /start бот может запрашивать ID и возвращать информацию о сертификате
-          </p>
-        </div>
+        <Card className="mt-8 shadow-xl border-2">
+          <CardHeader className="bg-gradient-to-r from-primary/10 via-accent/10 to-secondary/10">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Icon name="MessageSquare" size={24} className="text-primary" />
+                Telegram-бот
+              </CardTitle>
+              <Badge variant={webhookStatus.includes('✅') ? 'default' : 'secondary'}>
+                {webhookStatus || 'Проверка...'}
+              </Badge>
+            </div>
+            <CardDescription>Интеграция с Telegram Bot API</CardDescription>
+          </CardHeader>
+          <CardContent className="pt-6 space-y-4">
+            <div>
+              <p className="text-sm font-semibold mb-2">🔗 Webhook URL:</p>
+              <code className="block p-3 bg-muted rounded text-xs font-mono break-all">
+                https://functions.poehali.dev/5c3b7278-e9ff-4484-9925-98c58472a712
+              </code>
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                onClick={setupWebhook} 
+                disabled={loading}
+                className="gap-2"
+              >
+                <Icon name="Play" size={18} />
+                {webhookStatus.includes('✅') ? 'Переподключить' : 'Подключить'} Webhook
+              </Button>
+              <Button 
+                onClick={checkWebhook} 
+                variant="outline"
+                className="gap-2"
+              >
+                <Icon name="RefreshCw" size={18} />
+                Проверить
+              </Button>
+            </div>
+
+            <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-sm font-semibold mb-2 text-blue-900">💡 Как пользоваться:</p>
+              <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                <li>Найдите вашего бота в Telegram</li>
+                <li>Отправьте команду <code className="bg-blue-100 px-1 rounded">/start</code></li>
+                <li>Введите ID сертификата (например: CERT-2024-001)</li>
+                <li>Получите информацию и ссылку на сертификат!</li>
+              </ol>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
