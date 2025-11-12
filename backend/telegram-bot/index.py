@@ -46,7 +46,7 @@ def send_telegram_message(chat_id: int, text: str, parse_mode: str = 'HTML'):
 def search_certificate(cert_id: str) -> Optional[Dict[str, Any]]:
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, owner_name, certificate_url FROM certificates WHERE id = %s", (cert_id,))
+    cur.execute("SELECT id, owner_name, certificate_url, status FROM certificates WHERE id = %s", (cert_id,))
     cert = cur.fetchone()
     cur.close()
     conn.close()
@@ -94,7 +94,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 welcome_text = (
                     "🔐 <b>Добро пожаловать в систему верификации сертификатов!</b>\n\n"
                     "Отправьте мне ID сертификата для проверки.\n"
-                    "Например: <code>CERT-2024-001</code>"
+                    "Например: <code>CERT-</code>"
                 )
                 send_telegram_message(chat_id, welcome_text)
             
@@ -102,17 +102,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 cert = search_certificate(text.upper())
                 
                 if cert:
+                    status_emoji = "✅" if cert.get('status') == 'valid' else "❌"
+                    status_text = "Действительно" if cert.get('status') == 'valid' else "Недействительно"
+                    
                     result_text = (
-                        f"✅ <b>ID {cert['id']} найден!</b>\n\n"
-                        f"👤 <b>Принадлежит:</b> {cert['owner_name']}\n\n"
+                        f"{status_emoji} <b>ID {cert['id']} найден!</b>\n\n"
+                        f"👤 <b>Принадлежит:</b> {cert['owner_name']}\n"
+                        f"📋 <b>Статус:</b> {status_text}\n\n"
                         f"🔗 <b>Ссылка на просмотр:</b>\n{cert['certificate_url']}"
                     )
                     send_telegram_message(chat_id, result_text)
                 else:
-                    error_text = (
-                        f"❌ <b>Сертификат с ID {text.upper()} не найден</b>\n\n"
-                        "Проверьте правильность написания ID"
-                    )
+                    error_text = f"❌ <b>Сертификат с ID {text.upper()} не найден</b>"
                     send_telegram_message(chat_id, error_text)
             
             return {

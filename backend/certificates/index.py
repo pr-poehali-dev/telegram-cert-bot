@@ -46,7 +46,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         cur = conn.cursor()
         
         if cert_id:
-            cur.execute("SELECT id, owner_name, certificate_url, created_at FROM certificates WHERE id = %s", (cert_id,))
+            cur.execute("SELECT id, owner_name, certificate_url, status, created_at FROM certificates WHERE id = %s", (cert_id,))
             cert = cur.fetchone()
             cur.close()
             conn.close()
@@ -70,7 +70,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 }
         else:
             # Получить все сертификаты
-            cur.execute("SELECT id, owner_name, certificate_url, created_at FROM certificates ORDER BY created_at DESC")
+            cur.execute("SELECT id, owner_name, certificate_url, status, created_at FROM certificates ORDER BY created_at DESC")
             certs = cur.fetchall()
             cur.close()
             conn.close()
@@ -100,6 +100,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         cert_id = body_data.get('id', '').strip()
         owner_name = body_data.get('owner_name', '').strip()
         certificate_url = body_data.get('certificate_url', '').strip()
+        status = body_data.get('status', 'valid')
         
         if not cert_id or not owner_name or not certificate_url:
             return {
@@ -113,8 +114,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         cur = conn.cursor()
         
         cur.execute(
-            "INSERT INTO certificates (id, owner_name, certificate_url) VALUES (%s, %s, %s) ON CONFLICT (id) DO NOTHING RETURNING id",
-            (cert_id, owner_name, certificate_url)
+            "INSERT INTO certificates (id, owner_name, certificate_url, status) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING RETURNING id",
+            (cert_id, owner_name, certificate_url, status)
         )
         result = cur.fetchone()
         conn.commit()
@@ -173,6 +174,54 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'statusCode': 200,
                 'headers': headers,
                 'body': json.dumps({'success': True, 'message': 'Сертификат удален'}),
+                'isBase64Encoded': False
+            }
+        else:
+            return {
+                'statusCode': 404,
+                'headers': headers,
+                'body': json.dumps({'error': 'Сертификат не найден'}),
+                'isBase64Encoded': False
+            }
+    
+    # PUT /certificates - обновить статус сертификата
+    if method == 'PUT':
+        request_headers = event.get('headers', {})
+        admin_token = request_headers.get('X-Admin-Token') or request_headers.get('x-admin-token')
+        
+        if admin_token != 'skzry':
+            return {
+                'statusCode': 403,
+                'headers': headers,
+                'body': json.dumps({'error': 'Доступ запрещен'}),
+                'isBase64Encoded': False
+            }
+        
+        body_data = json.loads(event.get('body', '{}'))
+        cert_id = body_data.get('id', '').strip()
+        new_status = body_data.get('status', '').strip()
+        
+        if not cert_id or new_status not in ['valid', 'invalid']:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': 'Неверные параметры'}),
+                'isBase64Encoded': False
+            }
+        
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("UPDATE certificates SET status = %s WHERE id = %s RETURNING id", (new_status, cert_id))
+        result = cur.fetchone()
+        conn.commit()
+        cur.close()
+        conn.close()
+        
+        if result:
+            return {
+                'statusCode': 200,
+                'headers': headers,
+                'body': json.dumps({'success': True, 'message': 'Статус обновлен'}),
                 'isBase64Encoded': False
             }
         else:
