@@ -46,7 +46,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         cur = conn.cursor()
         
         if cert_id:
-            cur.execute("SELECT id, owner_name, certificate_url, status, created_at FROM certificates WHERE id = %s", (cert_id,))
+            cur.execute("SELECT id, owner_name, certificate_url, status, valid_from, valid_until, created_at FROM certificates WHERE id = %s", (cert_id,))
             cert = cur.fetchone()
             cur.close()
             conn.close()
@@ -70,7 +70,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 }
         else:
             # Получить все сертификаты
-            cur.execute("SELECT id, owner_name, certificate_url, status, created_at FROM certificates ORDER BY created_at DESC")
+            cur.execute("SELECT id, owner_name, certificate_url, status, valid_from, valid_until, created_at FROM certificates ORDER BY created_at DESC")
             certs = cur.fetchall()
             cur.close()
             conn.close()
@@ -101,6 +101,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         owner_name = body_data.get('owner_name', '').strip()
         certificate_url = body_data.get('certificate_url', '').strip()
         status = body_data.get('status', 'valid')
+        valid_from = body_data.get('valid_from')
+        valid_until = body_data.get('valid_until')
         
         if not cert_id or not owner_name or not certificate_url:
             return {
@@ -114,8 +116,8 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         cur = conn.cursor()
         
         cur.execute(
-            "INSERT INTO certificates (id, owner_name, certificate_url, status) VALUES (%s, %s, %s, %s) ON CONFLICT (id) DO NOTHING RETURNING id",
-            (cert_id, owner_name, certificate_url, status)
+            "INSERT INTO certificates (id, owner_name, certificate_url, status, valid_from, valid_until) VALUES (%s, %s, %s, %s, %s, %s) ON CONFLICT (id) DO NOTHING RETURNING id",
+            (cert_id, owner_name, certificate_url, status, valid_from, valid_until)
         )
         result = cur.fetchone()
         conn.commit()
@@ -184,7 +186,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 'isBase64Encoded': False
             }
     
-    # PUT /certificates - обновить статус сертификата
+    # PUT /certificates - обновить сертификат
     if method == 'PUT':
         request_headers = event.get('headers', {})
         admin_token = request_headers.get('X-Admin-Token') or request_headers.get('x-admin-token')
@@ -199,19 +201,53 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         body_data = json.loads(event.get('body', '{}'))
         cert_id = body_data.get('id', '').strip()
-        new_status = body_data.get('status', '').strip()
         
-        if not cert_id or new_status not in ['valid', 'invalid']:
+        if not cert_id:
             return {
                 'statusCode': 400,
                 'headers': headers,
-                'body': json.dumps({'error': 'Неверные параметры'}),
+                'body': json.dumps({'error': 'ID не указан'}),
                 'isBase64Encoded': False
             }
         
+        # Собираем поля для обновления
+        update_fields = []
+        update_values = []
+        
+        if 'status' in body_data and body_data['status'] in ['valid', 'invalid']:
+            update_fields.append('status = %s')
+            update_values.append(body_data['status'])
+        
+        if 'owner_name' in body_data:
+            update_fields.append('owner_name = %s')
+            update_values.append(body_data['owner_name'].strip())
+        
+        if 'certificate_url' in body_data:
+            update_fields.append('certificate_url = %s')
+            update_values.append(body_data['certificate_url'].strip())
+        
+        if 'valid_from' in body_data:
+            update_fields.append('valid_from = %s')
+            update_values.append(body_data['valid_from'])
+        
+        if 'valid_until' in body_data:
+            update_fields.append('valid_until = %s')
+            update_values.append(body_data['valid_until'])
+        
+        if not update_fields:
+            return {
+                'statusCode': 400,
+                'headers': headers,
+                'body': json.dumps({'error': 'Нет полей для обновления'}),
+                'isBase64Encoded': False
+            }
+        
+        update_values.append(cert_id)
+        
         conn = get_db_connection()
         cur = conn.cursor()
-        cur.execute("UPDATE certificates SET status = %s WHERE id = %s RETURNING id", (new_status, cert_id))
+        query = f"UPDATE certificates SET {', '.join(update_fields)} WHERE id = %s RETURNING id"
+        cur.execute(query, update_values)
         result = cur.fetchone()
         conn.commit()
         cur.close()
@@ -221,7 +257,7 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
             return {
                 'statusCode': 200,
                 'headers': headers,
-                'body': json.dumps({'success': True, 'message': 'Статус обновлен'}),
+                'body': json.dumps({'success': True, 'message': 'Сертификат обновлен'}),
                 'isBase64Encoded': False
             }
         else:

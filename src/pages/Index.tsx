@@ -16,13 +16,16 @@ interface Certificate {
   owner_name: string;
   certificate_url: string;
   status: 'valid' | 'invalid';
+  valid_from?: string;
+  valid_until?: string;
   created_at: string;
 }
 
 const Index = () => {
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newCert, setNewCert] = useState({ id: '', owner_name: '', certificate_url: '', status: 'valid' as 'valid' | 'invalid' });
+  const [newCert, setNewCert] = useState({ id: '', owner_name: '', certificate_url: '', status: 'valid' as 'valid' | 'invalid', valid_from: '', valid_until: '' });
+  const [editingCert, setEditingCert] = useState<Certificate | null>(null);
   const [loading, setLoading] = useState(false);
   const [webhookStatus, setWebhookStatus] = useState<string>('');
   const { toast } = useToast();
@@ -95,7 +98,7 @@ const Index = () => {
       
       if (res.ok) {
         toast({ title: '✅ Сертификат добавлен!' });
-        setNewCert({ id: '', owner_name: '', certificate_url: '', status: 'valid' });
+        setNewCert({ id: '', owner_name: '', certificate_url: '', status: 'valid', valid_from: '', valid_until: '' });
         setShowAddForm(false);
         fetchCertificates();
       } else {
@@ -128,6 +131,35 @@ const Index = () => {
       }
     } catch (error) {
       toast({ title: 'Ошибка сети', variant: 'destructive' });
+    }
+  };
+
+  const handleEdit = async () => {
+    if (!editingCert) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch(API_URL, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Admin-Token': ADMIN_USERNAME
+        },
+        body: JSON.stringify(editingCert)
+      });
+
+      if (res.ok) {
+        toast({ title: '✅ Сертификат обновлен!' });
+        setEditingCert(null);
+        fetchCertificates();
+      } else {
+        const data = await res.json();
+        toast({ title: data.error || 'Ошибка обновления', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Ошибка сети', variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -197,6 +229,24 @@ const Index = () => {
                     value={newCert.certificate_url}
                     onChange={(e) => setNewCert({ ...newCert, certificate_url: e.target.value })}
                   />
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Действителен с</label>
+                      <Input
+                        type="date"
+                        value={newCert.valid_from}
+                        onChange={(e) => setNewCert({ ...newCert, valid_from: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Действителен до</label>
+                      <Input
+                        type="date"
+                        value={newCert.valid_until}
+                        onChange={(e) => setNewCert({ ...newCert, valid_until: e.target.value })}
+                      />
+                    </div>
+                  </div>
                   <Select value={newCert.status} onValueChange={(v: 'valid' | 'invalid') => setNewCert({ ...newCert, status: v })}>
                     <SelectTrigger>
                       <SelectValue />
@@ -269,47 +319,117 @@ const Index = () => {
           </CardHeader>
           <CardContent className="pt-6">
             <div className="space-y-3">
-              {certificates.map((cert, idx) => (
+{certificates.map((cert, idx) => (
                 <div
                   key={cert.id}
-                  className="flex items-start gap-4 p-4 rounded-lg bg-gradient-to-r from-muted/50 to-muted/30 hover:from-muted hover:to-muted/50 transition-all border animate-fade-in"
+                  className="p-4 rounded-lg bg-gradient-to-r from-muted/50 to-muted/30 hover:from-muted hover:to-muted/50 transition-all border animate-fade-in"
                   style={{ animationDelay: `${idx * 0.05}s` }}
                 >
-                  <div className="flex-1">
-                    <Badge variant="outline" className="mb-2">{cert.id}</Badge>
-                    <p className="font-semibold">{cert.owner_name}</p>
-                    <a
-                      href={cert.certificate_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-sm text-primary hover:underline flex items-center gap-1 mt-1"
-                    >
-                      <Icon name="Link" size={14} />
-                      {cert.certificate_url}
-                    </a>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Select 
-                      value={cert.status} 
-                      onValueChange={(v: 'valid' | 'invalid') => handleStatusChange(cert.id, v)}
-                    >
-                      <SelectTrigger className="w-[180px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="valid">✅ Действительно</SelectItem>
-                        <SelectItem value="invalid">❌ Недействительно</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleDelete(cert.id)}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Icon name="Trash2" size={18} />
-                    </Button>
-                  </div>
+                  {editingCert?.id === cert.id ? (
+                    <div className="space-y-3">
+                      <Input
+                        placeholder="Кому принадлежит"
+                        value={editingCert.owner_name}
+                        onChange={(e) => setEditingCert({ ...editingCert, owner_name: e.target.value })}
+                      />
+                      <Input
+                        placeholder="Ссылка на сертификат"
+                        value={editingCert.certificate_url}
+                        onChange={(e) => setEditingCert({ ...editingCert, certificate_url: e.target.value })}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Действителен с</label>
+                          <Input
+                            type="date"
+                            value={editingCert.valid_from || ''}
+                            onChange={(e) => setEditingCert({ ...editingCert, valid_from: e.target.value })}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground mb-1 block">Действителен до</label>
+                          <Input
+                            type="date"
+                            value={editingCert.valid_until || ''}
+                            onChange={(e) => setEditingCert({ ...editingCert, valid_until: e.target.value })}
+                          />
+                        </div>
+                      </div>
+                      <Select 
+                        value={editingCert.status} 
+                        onValueChange={(v: 'valid' | 'invalid') => setEditingCert({ ...editingCert, status: v })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="valid">✅ Действительно</SelectItem>
+                          <SelectItem value="invalid">❌ Недействительно</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="flex gap-2">
+                        <Button onClick={handleEdit} disabled={loading} className="flex-1 gap-2">
+                          <Icon name="Save" size={18} />
+                          Сохранить
+                        </Button>
+                        <Button onClick={() => setEditingCert(null)} variant="outline">
+                          Отмена
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1">
+                        <Badge variant="outline" className="mb-2">{cert.id}</Badge>
+                        <p className="font-semibold">{cert.owner_name}</p>
+                        <a
+                          href={cert.certificate_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-primary hover:underline flex items-center gap-1 mt-1"
+                        >
+                          <Icon name="Link" size={14} />
+                          {cert.certificate_url}
+                        </a>
+                        {(cert.valid_from || cert.valid_until) && (
+                          <div className="text-xs text-muted-foreground mt-2 space-y-1">
+                            {cert.valid_from && <div>📅 С: {cert.valid_from}</div>}
+                            {cert.valid_until && <div>📅 До: {cert.valid_until}</div>}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Select 
+                          value={cert.status} 
+                          onValueChange={(v: 'valid' | 'invalid') => handleStatusChange(cert.id, v)}
+                        >
+                          <SelectTrigger className="w-[180px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="valid">✅ Действительно</SelectItem>
+                            <SelectItem value="invalid">❌ Недействительно</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setEditingCert(cert)}
+                          className="text-primary hover:text-primary"
+                        >
+                          <Icon name="Pencil" size={18} />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleDelete(cert.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Icon name="Trash2" size={18} />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

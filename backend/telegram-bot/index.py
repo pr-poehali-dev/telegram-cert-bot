@@ -94,7 +94,7 @@ def edit_message_text(chat_id: int, message_id: int, text: str, parse_mode: str 
 def search_certificate(cert_id: str) -> Optional[Dict[str, Any]]:
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, owner_name, certificate_url, status FROM certificates WHERE id = %s", (cert_id,))
+    cur.execute("SELECT id, owner_name, certificate_url, status, valid_from, valid_until FROM certificates WHERE id = %s", (cert_id,))
     cert = cur.fetchone()
     cur.close()
     conn.close()
@@ -103,7 +103,7 @@ def search_certificate(cert_id: str) -> Optional[Dict[str, Any]]:
 def get_all_certificates() -> List[Dict[str, Any]]:
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, owner_name, certificate_url, status FROM certificates ORDER BY created_at DESC")
+    cur.execute("SELECT id, owner_name, certificate_url, status, valid_from, valid_until FROM certificates ORDER BY created_at DESC")
     certs = cur.fetchall()
     cur.close()
     conn.close()
@@ -212,10 +212,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         status_emoji = "✅" if cert['status'] == 'valid' else "❌"
                         status_text = "Действительно" if cert['status'] == 'valid' else "Недействительно"
                         
+                        date_info = ""
+                        if cert.get('valid_from') or cert.get('valid_until'):
+                            date_info += "\n"
+                            if cert.get('valid_from'):
+                                date_info += f"📅 <b>Действителен с:</b> {cert['valid_from']}\n"
+                            if cert.get('valid_until'):
+                                date_info += f"📅 <b>Действителен до:</b> {cert['valid_until']}\n"
+                        
                         text = (
                             f"{status_emoji} <b>Сертификат {cert['id']}</b>\n\n"
                             f"👤 <b>Владелец:</b> {cert['owner_name']}\n"
-                            f"📋 <b>Статус:</b> {status_text}\n"
+                            f"📋 <b>Статус:</b> {status_text}{date_info}"
                             f"🔗 <b>Ссылка:</b> {cert['certificate_url']}"
                         )
                         
@@ -246,10 +254,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                         status_emoji = "✅" if cert['status'] == 'valid' else "❌"
                         status_text = "Действительно" if cert['status'] == 'valid' else "Недействительно"
                         
+                        date_info = ""
+                        if cert.get('valid_from') or cert.get('valid_until'):
+                            date_info += "\n"
+                            if cert.get('valid_from'):
+                                date_info += f"📅 <b>Действителен с:</b> {cert['valid_from']}\n"
+                            if cert.get('valid_until'):
+                                date_info += f"📅 <b>Действителен до:</b> {cert['valid_until']}\n"
+                        
                         text = (
                             f"{status_emoji} <b>Сертификат {cert['id']}</b>\n\n"
                             f"👤 <b>Владелец:</b> {cert['owner_name']}\n"
-                            f"📋 <b>Статус:</b> {status_text}\n"
+                            f"📋 <b>Статус:</b> {status_text}{date_info}"
                             f"🔗 <b>Ссылка:</b> {cert['certificate_url']}"
                         )
                         
@@ -321,10 +337,18 @@ def handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                     status_emoji = "✅" if cert.get('status') == 'valid' else "❌"
                     status_text = "Действительно" if cert.get('status') == 'valid' else "Недействительно"
                     
+                    date_info = ""
+                    if cert.get('valid_from') or cert.get('valid_until'):
+                        date_info += "\n"
+                        if cert.get('valid_from'):
+                            date_info += f"📅 <b>Действителен с:</b> {cert['valid_from']}\n"
+                        if cert.get('valid_until'):
+                            date_info += f"📅 <b>Действителен до:</b> {cert['valid_until']}\n"
+                    
                     result_text = (
                         f"{status_emoji} <b>ID {cert['id']} найден!</b>\n\n"
                         f"👤 <b>Принадлежит:</b> {cert['owner_name']}\n"
-                        f"📋 <b>Статус:</b> {status_text}\n\n"
+                        f"📋 <b>Статус:</b> {status_text}{date_info}\n"
                         f"🔗 <b>Ссылка на просмотр:</b>\n{cert['certificate_url']}"
                     )
                     send_telegram_message(chat_id, result_text)
